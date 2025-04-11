@@ -17,45 +17,73 @@
                 <thead class="table-light">
                     <tr>
                         <th>Name</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th>Membership</th>
-                        <th>Join Date</th>
-                        <th>End Date</th>
+                        <th>Contact Info</th>
+                        <th>Package</th>
+                        <th>Duration</th>
                         <th>Services</th>
-                        <th>Trainer</th>
+                        <th>Fees</th>
+                        <th>End Date</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for customer in customers %}
                     <tr>
                         <td>{{ customer.name }}</td>
-                        <td>{{ customer.email }}</td>
-                        <td>{{ customer.phone }}</td>
+                        <td>
+                            <small class="d-block">📧 {{ customer.email }}</small>
+                            <small class="d-block">📱 {{ customer.phone }}</small>
+                        </td>
                         <td>
                             <span class="badge bg-primary">
-                                {{ customer.membership_type|title }}
+                                {{ customer.package_type|upper }}
                             </span>
                         </td>
-                        <td>{{ customer.join_date.strftime('%Y-%m-%d') }}</td>
-                        <td>{{ customer.membership_end.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            {{ customer.join_date.strftime('%Y-%m-%d') }}
+                            <small class="d-block text-muted">
+                                {{ (customer.membership_end - customer.join_date).days // 30 }} month(s)
+                            </small>
+                        </td>
                         <td>
                             {% if customer.has_cardio %}
-                                <span class="badge bg-info me-1">
-                                    <i class="fas fa-running"></i> Cardio
+                                <span class="badge bg-info me-1" title="Cardio Training">
+                                    <i class="fas fa-running"></i>
                                 </span>
                             {% endif %}
                             {% if customer.has_personal_training %}
-                                <span class="badge bg-success">
-                                    <i class="fas fa-dumbbell"></i> PT
+                                <span class="badge bg-success me-1" title="Personal Training">
+                                    <i class="fas fa-dumbbell"></i>
+                                    {% if customer.personal_training_type %}
+                                        {{ customer.personal_training_type|title }}
+                                    {% endif %}
+                                </span>
+                            {% endif %}
+                            {% if customer.treadmill_access %}
+                                <span class="badge bg-warning text-dark" title="Treadmill Access">
+                                    <i class="fas fa-walking"></i>
                                 </span>
                             {% endif %}
                         </td>
                         <td>
-                            {% if customer.trainer %}
-                                {{ customer.trainer.username }}
+                            <small class="d-block">Package: ₹{{ customer.package_fee }}</small>
+                            {% if customer.admission_fee %}
+                                <small class="d-block">Admission: ₹{{ customer.admission_fee }}</small>
+                            {% endif %}
+                            {% if customer.discount %}
+                                <small class="d-block text-success">Discount: -₹{{ customer.discount }}</small>
+                            {% endif %}
+                            <strong class="d-block">Total: ₹{{ customer.total_amount }}</strong>
+                        </td>
+                        <td>{{ customer.membership_end.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            {% set days_left = (customer.membership_end - now).days %}
+                            {% if days_left < 0 %}
+                                <span class="badge bg-danger">Expired</span>
+                            {% elif days_left <= 7 %}
+                                <span class="badge bg-warning text-dark">Expiring Soon</span>
                             {% else %}
-                                -
+                                <span class="badge bg-success">Active</span>
                             {% endif %}
                         </td>
                     </tr>
