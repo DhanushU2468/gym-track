@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="card-title mb-0">
+                <i class="fas fa-users me-2"></i>Customer List
+            </h2>
+            <a href="{{ url_for('register_customer') }}" class="btn btn-primary">
+                <i class="fas fa-user-plus me-2"></i>Add New Customer
+            </a>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Membership</th>
+                        <th>Join Date</th>
+                        <th>End Date</th>
+                        <th>Services</th>
+                        <th>Trainer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for customer in customers %}
+                    <tr>
+                        <td>{{ customer.name }}</td>
+                        <td>{{ customer.email }}</td>
+                        <td>{{ customer.phone }}</td>
+                        <td>
+                            <span class="badge bg-primary">
+                                {{ customer.membership_type|title }}
+                            </span>
+                        </td>
+                        <td>{{ customer.join_date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ customer.membership_end.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            {% if customer.has_cardio %}
+                                <span class="badge bg-info me-1">
+                                    <i class="fas fa-running"></i> Cardio
+                                </span>
+                            {% endif %}
+                            {% if customer.has_personal_training %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-dumbbell"></i> PT
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if customer.trainer %}
+                                {{ customer.trainer.username }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %} 

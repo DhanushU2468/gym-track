@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center">
+        <h1 class="display-4 mb-4">
+            <i class="fas fa-dumbbell me-3"></i>Welcome to Gym Management
+        </h1>
+        <p class="lead mb-5">Manage your gym members, track memberships, and handle additional services all in one place.</p>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    {% if current_user.is_authenticated %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-user-plus fa-3x mb-3 text-primary"></i>
+                    <h3 class="card-title">Register Customer</h3>
+                    <p class="card-text">Add new members to your gym with their membership details and preferences.</p>
+                    <a href="{{ url_for('register_customer') }}" class="btn btn-primary">
+                        <i class="fas fa-user-plus me-2"></i>Register Now
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-users fa-3x mb-3 text-success"></i>
+                    <h3 class="card-title">View Members</h3>
+                    <p class="card-text">See all your gym members and their membership status at a glance.</p>
+                    <a href="{{ url_for('view_customers') }}" class="btn btn-success">
+                        <i class="fas fa-users me-2"></i>View Members
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="col-md-6 text-center">
+            <div class="card">
+                <div class="card-body">
+                    <i class="fas fa-sign-in-alt fa-3x mb-3 text-primary"></i>
+                    <h3 class="card-title">Get Started</h3>
+                    <p class="card-text">Please log in to access the gym management features.</p>
+                    <a href="{{ url_for('login') }}" class="btn btn-primary">
+                        <i class="fas fa-sign-in-alt me-2"></i>Login
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %} 
