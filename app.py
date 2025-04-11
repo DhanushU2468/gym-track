@@ -11,11 +11,13 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24))
-# Use SQLite locally, but PostgreSQL in production
-if os.getenv('DATABASE_URL'):
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///gym.db'
+
+# Database configuration
+DATABASE_URL = os.getenv('DATABASE_URL')
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///gym.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -112,6 +114,17 @@ class Customer(db.Model):
     discount = db.Column(db.Float, nullable=True)
     total_amount = db.Column(db.Float, nullable=False)
     treadmill_access = db.Column(db.Boolean, default=False)
+    fees = db.relationship('Fee', backref='customer', lazy=True)
+    pending_amount = db.Column(db.Float, default=0.0)
+
+class Fee(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    payment_date = db.Column(db.DateTime, default=datetime.utcnow)
+    payment_type = db.Column(db.String(50), nullable=False)  # registration, monthly, additional
+    description = db.Column(db.String(200))
+    collected_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 def send_sms(to_number, message):
     if twilio_client and TWILIO_PHONE_NUMBER:
@@ -247,8 +260,24 @@ def register_customer():
             treadmill_access=treadmill_access
         )
         
+        # Add initial payment record
+        initial_payment = float(request.form.get('initial_payment', 0))
+        customer.pending_amount = total_amount - initial_payment
+        
         db.session.add(customer)
         db.session.commit()
+
+        if initial_payment > 0:
+            fee = Fee(
+                customer_id=customer.id,
+                amount=initial_payment,
+                payment_type='registration',
+                description='Initial registration payment',
+                collected_by=current_user.id
+            )
+            db.session.add(fee)
+            db.session.commit()
+
         flash('Customer registered successfully!', 'success')
         return redirect(url_for('view_customers'))
     
@@ -258,7 +287,16 @@ def register_customer():
 @login_required
 def view_customers():
     customers = Customer.query.all()
-    return render_template('view_customers.html', customers=customers, now=datetime.utcnow())
+    total_fees = db.session.query(db.func.sum(Fee.amount)).scalar() or 0
+    today_fees = db.session.query(db.func.sum(Fee.amount)).filter(
+        db.func.date(Fee.payment_date) == datetime.utcnow().date()
+    ).scalar() or 0
+    
+    return render_template('view_customers.html', 
+                         customers=customers, 
+                         now=datetime.utcnow(),
+                         total_fees=total_fees,
+                         today_fees=today_fees)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -279,6 +317,58 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('index'))
+
+@app.route('/delete_customer/<int:customer_id>', methods=['POST'])
+@login_required
+def delete_customer(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    customer_name = customer.name
+    
+    try:
+        db.session.delete(customer)
+        db.session.commit()
+        flash(f'Customer {customer_name} has been successfully removed.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while deleting the customer.', 'error')
+        print(f"Error deleting customer: {str(e)}")
+    
+    return redirect(url_for('view_customers'))
+
+@app.route('/add_fee/<int:customer_id>', methods=['POST'])
+@login_required
+def add_fee(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    amount = float(request.form.get('amount', 0))
+    payment_type = request.form.get('payment_type')
+    description = request.form.get('description', '')
+
+    if amount <= 0:
+        flash('Please enter a valid amount.', 'error')
+        return redirect(url_for('view_customers'))
+
+    fee = Fee(
+        customer_id=customer_id,
+        amount=amount,
+        payment_type=payment_type,
+        description=description,
+        collected_by=current_user.id
+    )
+
+    # Update pending amount
+    if customer.pending_amount >= amount:
+        customer.pending_amount -= amount
+    
+    try:
+        db.session.add(fee)
+        db.session.commit()
+        flash(f'Payment of ₹{amount} has been recorded successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while recording the payment.', 'error')
+        print(f"Error recording payment: {str(e)}")
+
+    return redirect(url_for('view_customers'))
 
 if __name__ == '__main__':
     with app.app_context():
