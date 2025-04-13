@@ -85,8 +85,18 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 ADMIN_PHONE_NUMBER = os.getenv('ADMIN_PHONE_NUMBER')
 
+# Print Twilio configuration for debugging
+print(f"Twilio Account SID: {TWILIO_ACCOUNT_SID}")
+print(f"Twilio Auth Token: {'*' * len(TWILIO_AUTH_TOKEN) if TWILIO_AUTH_TOKEN else 'Not set'}")
+print(f"Twilio Phone Number: {TWILIO_PHONE_NUMBER}")
+print(f"Admin Phone Number: {ADMIN_PHONE_NUMBER}")
+
 # Initialize Twilio client
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN else None
+if twilio_client:
+    print("Twilio client initialized successfully")
+else:
+    print("Failed to initialize Twilio client. Check your credentials.")
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -99,7 +109,7 @@ class User(UserMixin, db.Model):
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
     phone = db.Column(db.String(20), nullable=False)
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
     package_type = db.Column(db.String(20), nullable=False)  # basic, standard, premium, ultimate
@@ -114,7 +124,7 @@ class Customer(db.Model):
     discount = db.Column(db.Float, nullable=True)
     total_amount = db.Column(db.Float, nullable=False)
     treadmill_access = db.Column(db.Boolean, default=False)
-    fees = db.relationship('Fee', backref='customer', lazy=True)
+    fees = db.relationship('Fee', backref='customer', lazy=True, cascade="all, delete-orphan")
     pending_amount = db.Column(db.Float, default=0.0)
 
 class Fee(db.Model):
@@ -129,6 +139,20 @@ class Fee(db.Model):
 def send_sms(to_number, message):
     if twilio_client and TWILIO_PHONE_NUMBER:
         try:
+            # Format the phone number to E.164 format if needed
+            if not to_number.startswith('+'):
+                # If it's an Indian number without country code
+                if to_number.startswith('9') and len(to_number) == 10:
+                    to_number = '+91' + to_number
+                # If it's a US number without country code
+                elif len(to_number) == 10:
+                    to_number = '+91' + to_number
+                else:
+                    to_number = '+91' + to_number
+            
+            print(f"Sending SMS to {to_number}: {message}")
+            
+            # Actually send the SMS
             twilio_client.messages.create(
                 body=message,
                 from_=TWILIO_PHONE_NUMBER,
@@ -137,6 +161,11 @@ def send_sms(to_number, message):
             return True
         except Exception as e:
             print(f"Error sending SMS: {str(e)}")
+            print(f"Error details: {type(e).__name__}")
+            if hasattr(e, 'code'):
+                print(f"Twilio error code: {e.code}")
+            if hasattr(e, 'msg'):
+                print(f"Twilio error message: {e.msg}")
     return False
 
 def check_expiring_memberships():
@@ -157,7 +186,12 @@ def check_expiring_memberships():
                 f"Dear {customer.name}, your {customer.package_type} membership at The Fitness Zone "
                 f"will expire in {days_left} days. Please renew to continue enjoying our services!"
             )
-            send_sms(customer.phone, customer_message)
+            print(f"Attempting to send expiration reminder to customer: {customer.phone}")
+            customer_sms_sent = send_sms(customer.phone, customer_message)
+            if customer_sms_sent:
+                print(f"Expiration reminder sent successfully to {customer.phone}")
+            else:
+                print(f"Failed to send expiration reminder to {customer.phone}")
 
             # Send notification to admin
             admin_message = (
@@ -165,10 +199,25 @@ def check_expiring_memberships():
                 f"will expire in {days_left} days. Contact: {customer.phone}"
             )
             if ADMIN_PHONE_NUMBER:
-                send_sms(ADMIN_PHONE_NUMBER, admin_message)
+                print(f"Attempting to send admin notification to: {ADMIN_PHONE_NUMBER}")
+                admin_sms_sent = send_sms(ADMIN_PHONE_NUMBER, admin_message)
+                if admin_sms_sent:
+                    print(f"Admin notification sent successfully to {ADMIN_PHONE_NUMBER}")
+                else:
+                    print(f"Failed to send admin notification to {ADMIN_PHONE_NUMBER}")
 
             # Mark notification as sent
             customer.notification_sent = True
+            db.session.commit()
+            
+        # Reset notification_sent flag for expired memberships to allow re-notification
+        expired = Customer.query.filter(
+            Customer.membership_end < datetime.utcnow(),
+            Customer.notification_sent == True
+        ).all()
+        
+        for customer in expired:
+            customer.notification_sent = False
             db.session.commit()
 
 # Initialize scheduler
@@ -217,7 +266,7 @@ def create_admin():
 def register_customer():
     if request.method == 'POST':
         name = request.form.get('name')
-        email = request.form.get('email')
+        email = request.form.get('email')  # This will be None if not provided
         phone = request.form.get('phone')
         package_type = request.form.get('package_type')
         has_cardio = 'has_cardio' in request.form
@@ -245,7 +294,7 @@ def register_customer():
         
         customer = Customer(
             name=name,
-            email=email,
+            email=email,  # This can be None
             phone=phone,
             package_type=package_type,
             membership_end=end_date,
@@ -278,6 +327,32 @@ def register_customer():
             db.session.add(fee)
             db.session.commit()
 
+        # Send welcome SMS to customer
+        welcome_message = (
+            f"Welcome to The Fitness Zone, {customer.name}! Your {customer.package_type} membership "
+            f"has been activated. Your membership will expire on {customer.membership_end.strftime('%d-%m-%Y')}. "
+            f"Thank you for choosing us!"
+        )
+        print(f"Attempting to send welcome SMS to customer: {customer.phone}")
+        customer_sms_sent = send_sms(customer.phone, welcome_message)
+        if customer_sms_sent:
+            print(f"Welcome SMS sent successfully to {customer.phone}")
+        else:
+            print(f"Failed to send welcome SMS to {customer.phone}")
+
+        # Send notification to admin
+        admin_notification = (
+            f"New customer registered: {customer.name}, {customer.package_type} package, "
+            f"Phone: {customer.phone}, Expiry: {customer.membership_end.strftime('%d-%m-%Y')}"
+        )
+        if ADMIN_PHONE_NUMBER:
+            print(f"Attempting to send admin notification to: {ADMIN_PHONE_NUMBER}")
+            admin_sms_sent = send_sms(ADMIN_PHONE_NUMBER, admin_notification)
+            if admin_sms_sent:
+                print(f"Admin notification sent successfully to {ADMIN_PHONE_NUMBER}")
+            else:
+                print(f"Failed to send admin notification to {ADMIN_PHONE_NUMBER}")
+
         flash('Customer registered successfully!', 'success')
         return redirect(url_for('view_customers'))
     
@@ -297,6 +372,47 @@ def view_customers():
                          now=datetime.utcnow(),
                          total_fees=total_fees,
                          today_fees=today_fees)
+
+@app.route('/send_reminder/<int:customer_id>', methods=['POST'])
+@login_required
+def send_reminder(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    
+    # Calculate days until expiration
+    days_left = (customer.membership_end - datetime.utcnow()).days
+    
+    # Send notification to customer
+    customer_message = (
+        f"Dear {customer.name}, your {customer.package_type} membership at The Fitness Zone "
+        f"will expire in {days_left} days. Please renew to continue enjoying our services!"
+    )
+    print(f"Attempting to send reminder SMS to customer: {customer.phone}")
+    customer_sms_sent = send_sms(customer.phone, customer_message)
+    if customer_sms_sent:
+        print(f"Reminder SMS sent successfully to {customer.phone}")
+    else:
+        print(f"Failed to send reminder SMS to {customer.phone}")
+
+    # Send notification to admin
+    admin_message = (
+        f"ALERT: Customer {customer.name}'s {customer.package_type} membership at The Fitness Zone "
+        f"will expire in {days_left} days. Contact: {customer.phone}"
+    )
+    admin_sms_sent = False
+    if ADMIN_PHONE_NUMBER:
+        print(f"Attempting to send admin notification to: {ADMIN_PHONE_NUMBER}")
+        admin_sms_sent = send_sms(ADMIN_PHONE_NUMBER, admin_message)
+        if admin_sms_sent:
+            print(f"Admin notification sent successfully to {ADMIN_PHONE_NUMBER}")
+        else:
+            print(f"Failed to send admin notification to {ADMIN_PHONE_NUMBER}")
+    
+    if customer_sms_sent:
+        flash(f'Reminder sent to {customer.name}.', 'success')
+    else:
+        flash(f'Failed to send reminder to {customer.name}.', 'error')
+        
+    return redirect(url_for('view_customers'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -325,6 +441,7 @@ def delete_customer(customer_id):
     customer_name = customer.name
     
     try:
+        # Delete the customer (related fees will be deleted automatically due to cascade)
         db.session.delete(customer)
         db.session.commit()
         flash(f'Customer {customer_name} has been successfully removed.', 'success')
@@ -369,6 +486,27 @@ def add_fee(customer_id):
         print(f"Error recording payment: {str(e)}")
 
     return redirect(url_for('view_customers'))
+
+@app.route('/test_sms')
+@login_required
+def test_sms():
+    if not current_user.is_admin:
+        flash('Only admins can access this page.', 'error')
+        return redirect(url_for('index'))
+    
+    test_message = "This is a test SMS from The Fitness Zone gym management system."
+    test_number = ADMIN_PHONE_NUMBER
+    
+    if test_number:
+        result = send_sms(test_number, test_message)
+        if result:
+            flash('Test SMS sent successfully!', 'success')
+        else:
+            flash('Failed to send test SMS. Check the console for details.', 'error')
+    else:
+        flash('Admin phone number not configured. Please set ADMIN_PHONE_NUMBER in your .env file.', 'error')
+    
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     with app.app_context():
