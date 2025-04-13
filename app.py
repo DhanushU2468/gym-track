@@ -149,41 +149,43 @@ class Fee(db.Model):
 
 def send_sms(to_number, message):
     """Send SMS using Twilio"""
-    if not twilio_client or not TWILIO_PHONE_NUMBER:
-        print("Twilio configuration not found. SMS notifications will be disabled.")
-        return False
-    
-    try:
-        # Format the phone number to E.164 format if needed
-        if not to_number.startswith('+'):
-            # If it's an Indian number without country code
-            if to_number.startswith('9') and len(to_number) == 10:
-                to_number = '+91' + to_number
-            # If it's a US number without country code
-            elif len(to_number) == 10:
-                to_number = '+91' + to_number
-            else:
-                to_number = '+91' + to_number
-        
-        print(f"Sending SMS to {to_number}: {message}")
-        
-        # Actually send the SMS
-        twilio_client.messages.create(
-            body=message,
-            from_=TWILIO_PHONE_NUMBER,
-            to=to_number
-        )
-        return True
-    except Exception as e:
-        print(f"Error sending SMS: {str(e)}")
-        print(f"Error details: {type(e).__name__}")
-        if hasattr(e, 'code'):
-            print(f"Twilio error code: {e.code}")
-        if hasattr(e, 'msg'):
-            print(f"Twilio error message: {e.msg}")
-        return False
+    with app.app_context():
+        if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not TWILIO_PHONE_NUMBER:
+            print("Twilio credentials not configured. Skipping SMS.")
+            return False
+
+        try:
+            # Format the phone number
+            if not to_number.startswith('+'):
+                # If it's an Indian number without country code
+                if len(to_number) == 10:
+                    to_number = '+91' + to_number
+                else:
+                    to_number = '+' + to_number
+
+            print(f"Attempting to send SMS to {to_number}")
+            
+            # Initialize Twilio client
+            client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+            
+            # Send message
+            message = client.messages.create(
+                body=message,
+                from_=TWILIO_PHONE_NUMBER,
+                to=to_number
+            )
+            print(f"SMS sent successfully. SID: {message.sid}")
+            return True
+        except Exception as e:
+            print(f"Error sending SMS: {str(e)}")
+            if hasattr(e, 'code'):
+                print(f"Twilio error code: {e.code}")
+            if hasattr(e, 'msg'):
+                print(f"Twilio error message: {e.msg}")
+            return False
 
 def check_expiring_memberships():
+    """Check for memberships that are expiring soon and send notifications"""
     with app.app_context():
         # Get memberships expiring in the next 7 days
         expiring_soon = Customer.query.filter(
@@ -245,7 +247,9 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 def admin_exists():
-    return User.query.filter_by(is_admin=True).first() is not None
+    """Check if an admin user exists in the database"""
+    with app.app_context():
+        return User.query.filter_by(is_admin=True).first() is not None
 
 # Routes
 @app.route('/')
@@ -376,7 +380,20 @@ def register_customer():
 @app.route('/view_customers')
 @login_required
 def view_customers():
-    customers = Customer.query.all()
+    search_query = request.args.get('search', '')
+    
+    if search_query:
+        # Search in name, email, and phone
+        customers = Customer.query.filter(
+            db.or_(
+                Customer.name.ilike(f'%{search_query}%'),
+                Customer.email.ilike(f'%{search_query}%'),
+                Customer.phone.ilike(f'%{search_query}%')
+            )
+        ).all()
+    else:
+        customers = Customer.query.all()
+    
     total_fees = db.session.query(db.func.sum(Fee.amount)).scalar() or 0
     today_fees = db.session.query(db.func.sum(Fee.amount)).filter(
         db.func.date(Fee.payment_date) == datetime.utcnow().date()
@@ -386,7 +403,8 @@ def view_customers():
                          customers=customers, 
                          now=datetime.utcnow(),
                          total_fees=total_fees,
-                         today_fees=today_fees)
+                         today_fees=today_fees,
+                         search_query=search_query)
 
 @app.route('/send_reminder/<int:customer_id>', methods=['POST'])
 @login_required
@@ -594,23 +612,24 @@ def edit_customer(customer_id):
 
 def init_db():
     """Initialize the database and create tables if they don't exist"""
-    try:
-        # Check if tables exist
-        inspector = db.inspect(db.engine)
-        existing_tables = inspector.get_table_names()
-        
-        if not existing_tables:
-            # Create all tables only if they don't exist
-            db.create_all()
-            print("Database tables created successfully")
-        else:
-            print("Database tables already exist")
-        
-        # Check if admin exists, if not, redirect to create admin page
-        if not admin_exists():
-            print("No admin user found. Please create an admin account.")
-    except Exception as e:
-        print(f"Error initializing database: {str(e)}")
+    with app.app_context():
+        try:
+            # Check if tables exist
+            inspector = db.inspect(db.engine)
+            existing_tables = inspector.get_table_names()
+            
+            if not existing_tables:
+                # Create all tables only if they don't exist
+                db.create_all()
+                print("Database tables created successfully")
+            else:
+                print("Database tables already exist")
+            
+            # Check if admin exists, if not, redirect to create admin page
+            if not admin_exists():
+                print("No admin user found. Please create an admin account.")
+        except Exception as e:
+            print(f"Error initializing database: {str(e)}")
 
 if __name__ == '__main__':
     init_db()

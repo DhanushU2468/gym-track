@@ -30,11 +30,27 @@
             <h2 class="card-title mb-0">
                 <i class="fas fa-users me-2"></i>Customer List
             </h2>
-            <a href="{{ url_for('register_customer') }}" class="btn btn-primary">
-                <i class="fas fa-user-plus me-2"></i>Add New Customer
-            </a>
+            <div class="d-flex align-items-center">
+                <!-- Search Bar -->
+                <form action="{{ url_for('view_customers') }}" method="get" class="me-3">
+                    <div class="input-group">
+                        <input type="text" name="search" class="form-control" placeholder="Search customers..." value="{{ search_query }}">
+                        <button class="btn btn-outline-secondary" type="submit">
+                            <i class="fas fa-search"></i>
+                        </button>
+                        {% if search_query %}
+                        <a href="{{ url_for('view_customers') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </form>
+                <a href="{{ url_for('register_customer') }}" class="btn btn-primary">
+                    <i class="fas fa-user-plus me-2"></i>Add New Customer
+                </a>
+            </div>
         </div>
-        
+
         <div class="table-responsive">
             <table class="table table-hover">
                 <thead class="table-light">
