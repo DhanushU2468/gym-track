@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3>Edit Customer - {{ customer.name }}</h3>
+                    <a href="{{ url_for('view_customer', customer_id=customer.id) }}" class="btn btn-secondary">Back to Details</a>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>Personal Information</h5>
+                                <div class="form-group mb-3">
+                                    <label for="name">Name</label>
+                                    <input type="text" class="form-control" id="name" name="name" value="{{ customer.name }}" required>
+                                </div>
+                                <div class="form-group mb-3">
+                                    <label for="email">Email</label>
+                                    <input type="email" class="form-control" id="email" name="email" value="{{ customer.email or '' }}">
+                                </div>
+                                <div class="form-group mb-3">
+                                    <label for="phone">Phone</label>
+                                    <input type="text" class="form-control" id="phone" name="phone" value="{{ customer.phone }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>Membership Access</h5>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" id="has_cardio" name="has_cardio" {% if customer.has_cardio %}checked{% endif %}>
+                                    <label class="form-check-label" for="has_cardio">Cardio Access</label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" id="has_personal_training" name="has_personal_training" {% if customer.has_personal_training %}checked{% endif %}>
+                                    <label class="form-check-label" for="has_personal_training">Personal Training</label>
+                                </div>
+                                <div class="form-group mb-3" id="personal_training_type_group" style="display: {% if customer.has_personal_training %}block{% else %}none{% endif %};">
+                                    <label for="personal_training_type">Personal Training Type</label>
+                                    <select class="form-control" id="personal_training_type" name="personal_training_type">
+                                        <option value="monthly" {% if customer.personal_training_type == 'monthly' %}selected{% endif %}>Monthly</option>
+                                        <option value="quarterly" {% if customer.personal_training_type == 'quarterly' %}selected{% endif %}>Quarterly</option>
+                                    </select>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" id="treadmill_access" name="treadmill_access" {% if customer.treadmill_access %}checked{% endif %}>
+                                    <label class="form-check-label" for="treadmill_access">Treadmill Access</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                            <a href="{{ url_for('view_customer', customer_id=customer.id) }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('has_personal_training').addEventListener('change', function() {
+    var typeGroup = document.getElementById('personal_training_type_group');
+    typeGroup.style.display = this.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %} 

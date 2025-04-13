@@ -44,14 +44,28 @@ python app.py
 
 This application is configured for deployment on Render.com:
 
+### Option 1: Using render.yaml (Recommended)
+
 1. Create a new Web Service on Render
 2. Connect your GitHub repository
-3. Set the following:
+3. Render will automatically detect the render.yaml file and set up both the web service and PostgreSQL database
+4. Add the following environment variables in the Render dashboard:
+   - TWILIO_ACCOUNT_SID
+   - TWILIO_AUTH_TOKEN
+   - TWILIO_PHONE_NUMBER
+   - ADMIN_PHONE_NUMBER
+
+### Option 2: Manual Setup
+
+1. Create a new PostgreSQL database on Render
+2. Create a new Web Service on Render
+3. Connect your GitHub repository
+4. Set the following:
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `gunicorn app:app`
-4. Add the following environment variables:
-   - SECRET_KEY
-   - DATABASE_URL (provided by Render)
+5. Add the following environment variables:
+   - SECRET_KEY (can be generated)
+   - DATABASE_URL (provided by Render for your PostgreSQL database)
    - TWILIO_ACCOUNT_SID
    - TWILIO_AUTH_TOKEN
    - TWILIO_PHONE_NUMBER

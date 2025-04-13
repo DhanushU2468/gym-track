@@ -19,6 +19,13 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///gym.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Print database URL for debugging (without sensitive information)
+if DATABASE_URL:
+    masked_url = DATABASE_URL.split('@')[0] + '@*****' if '@' in DATABASE_URL else '*****'
+    print(f"Using database: {masked_url}")
+else:
+    print("Using SQLite database: gym.db")
+
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -508,7 +515,88 @@ def test_sms():
     
     return redirect(url_for('index'))
 
-if __name__ == '__main__':
-    with app.app_context():
+@app.route('/extend_membership/<int:customer_id>', methods=['GET', 'POST'])
+@login_required
+def extend_membership(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    
+    if request.method == 'POST':
+        extension_period = int(request.form.get('extension_period', 0))
+        cardio_access = request.form.get('cardio_access') == 'on'
+        personal_training = request.form.get('personal_training') == 'on'
+        treadmill_access = request.form.get('treadmill_access') == 'on'
+        personal_training_type = request.form.get('personal_training_type')
+        initial_payment = float(request.form.get('initial_payment', 0))
+        
+        # Calculate new expiry date
+        current_expiry = customer.membership_end or datetime.now()
+        new_expiry = current_expiry + timedelta(days=30 * extension_period)
+        
+        # Update customer details
+        customer.membership_end = new_expiry
+        customer.has_cardio = cardio_access
+        customer.has_personal_training = personal_training
+        customer.treadmill_access = treadmill_access
+        customer.personal_training_type = personal_training_type if personal_training else None
+        
+        # Create payment record
+        payment = Fee(
+            customer_id=customer.id,
+            amount=initial_payment,
+            payment_date=datetime.now(),
+            payment_type='Membership Extension',
+            collected_by=current_user.id
+        )
+        
+        db.session.add(payment)
+        db.session.commit()
+        
+        flash('Membership extended successfully!', 'success')
+        return redirect(url_for('view_customers'))
+    
+    return render_template('extend_membership.html', customer=customer)
+
+@app.route('/view_customer/<int:customer_id>')
+@login_required
+def view_customer(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    fees = Fee.query.filter_by(customer_id=customer_id).order_by(Fee.payment_date.desc()).all()
+    return render_template('view_customer.html', customer=customer, fees=fees)
+
+@app.route('/edit_customer/<int:customer_id>', methods=['GET', 'POST'])
+@login_required
+def edit_customer(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    
+    if request.method == 'POST':
+        # Update customer details
+        customer.name = request.form.get('name')
+        customer.email = request.form.get('email')
+        customer.phone = request.form.get('phone')
+        customer.has_cardio = 'has_cardio' in request.form
+        customer.has_personal_training = 'has_personal_training' in request.form
+        customer.personal_training_type = request.form.get('personal_training_type') if 'has_personal_training' in request.form else None
+        customer.treadmill_access = 'treadmill_access' in request.form
+        
+        db.session.commit()
+        flash('Customer details updated successfully!', 'success')
+        return redirect(url_for('view_customer', customer_id=customer.id))
+    
+    return render_template('edit_customer.html', customer=customer)
+
+def init_db():
+    """Initialize the database and create tables if they don't exist"""
+    try:
+        # Create all tables
         db.create_all()
+        print("Database tables created successfully")
+        
+        # Check if admin exists, if not, redirect to create admin page
+        if not admin_exists():
+            print("No admin user found. Please create an admin account.")
+    except Exception as e:
+        print(f"Error initializing database: {str(e)}")
+
+if __name__ == '__main__':
+    init_db()
     app.run(debug=True) 

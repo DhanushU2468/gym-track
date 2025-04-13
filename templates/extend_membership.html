@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Extend Membership - {{ customer.name }}</h2>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Customer Details</h5>
+            <p><strong>Name:</strong> {{ customer.name }}</p>
+            <p><strong>Package:</strong> {{ customer.package_type }}</p>
+            <p><strong>Current Expiry:</strong> {{ customer.membership_end.strftime('%d-%m-%Y') }}</p>
+            <p><strong>Pending Amount:</strong> ₹{{ "%.2f"|format(customer.pending_amount) }}</p>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label for="extension_period">Extension Period (months)</label>
+                    <input type="number" class="form-control" id="extension_period" name="extension_period" min="1" value="1" required>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" id="cardio_access" name="cardio_access" {% if customer.cardio_access %}checked{% endif %}>
+                    <label class="form-check-label" for="cardio_access">Cardio Access</label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" id="personal_training" name="personal_training" {% if customer.personal_training %}checked{% endif %}>
+                    <label class="form-check-label" for="personal_training">Personal Training</label>
+                </div>
+                
+                <div class="form-group mb-3" id="personal_training_type_group" style="display: none;">
+                    <label for="personal_training_type">Personal Training Type</label>
+                    <select class="form-control" id="personal_training_type" name="personal_training_type">
+                        <option value="basic" {% if customer.personal_training_type == 'basic' %}selected{% endif %}>Basic</option>
+                        <option value="premium" {% if customer.personal_training_type == 'premium' %}selected{% endif %}>Premium</option>
+                    </select>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" id="treadmill_access" name="treadmill_access" {% if customer.treadmill_access %}checked{% endif %}>
+                    <label class="form-check-label" for="treadmill_access">Treadmill Access</label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="initial_payment">Initial Payment</label>
+                    <input type="number" class="form-control" id="initial_payment" name="initial_payment" min="0" step="0.01" value="0" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Extend Membership</button>
+                <a href="{{ url_for('view_customer', customer_id=customer.id) }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('personal_training').addEventListener('change', function() {
+    var typeGroup = document.getElementById('personal_training_type_group');
+    typeGroup.style.display = this.checked ? 'block' : 'none';
+});
+
+// Initialize the personal training type group visibility
+document.addEventListener('DOMContentLoaded', function() {
+    var personalTraining = document.getElementById('personal_training');
+    var typeGroup = document.getElementById('personal_training_type_group');
+    typeGroup.style.display = personalTraining.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: gym-track
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: ADMIN_PHONE_NUMBER
+        sync: false
+  - type: pgsql
+    name: gym-track-db
+    ipAllowList: []
+    plan: free 
