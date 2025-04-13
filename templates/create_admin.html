@@ -10,6 +10,7 @@
                 </h2>
                 <p class="text-center mb-4">Welcome! Please create your admin account to get started.</p>
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
                         <input type="text" class="form-control" id="username" name="username" required>

@@ -6,11 +6,15 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from twilio.rest import Client
 import os
 from dotenv import load_dotenv
+from flask_wtf.csrf import CSRFProtect
 
 load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24))
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
 
 # Database configuration
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -144,36 +148,40 @@ class Fee(db.Model):
     collected_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 def send_sms(to_number, message):
-    if twilio_client and TWILIO_PHONE_NUMBER:
-        try:
-            # Format the phone number to E.164 format if needed
-            if not to_number.startswith('+'):
-                # If it's an Indian number without country code
-                if to_number.startswith('9') and len(to_number) == 10:
-                    to_number = '+91' + to_number
-                # If it's a US number without country code
-                elif len(to_number) == 10:
-                    to_number = '+91' + to_number
-                else:
-                    to_number = '+91' + to_number
-            
-            print(f"Sending SMS to {to_number}: {message}")
-            
-            # Actually send the SMS
-            twilio_client.messages.create(
-                body=message,
-                from_=TWILIO_PHONE_NUMBER,
-                to=to_number
-            )
-            return True
-        except Exception as e:
-            print(f"Error sending SMS: {str(e)}")
-            print(f"Error details: {type(e).__name__}")
-            if hasattr(e, 'code'):
-                print(f"Twilio error code: {e.code}")
-            if hasattr(e, 'msg'):
-                print(f"Twilio error message: {e.msg}")
-    return False
+    """Send SMS using Twilio"""
+    if not twilio_client or not TWILIO_PHONE_NUMBER:
+        print("Twilio configuration not found. SMS notifications will be disabled.")
+        return False
+    
+    try:
+        # Format the phone number to E.164 format if needed
+        if not to_number.startswith('+'):
+            # If it's an Indian number without country code
+            if to_number.startswith('9') and len(to_number) == 10:
+                to_number = '+91' + to_number
+            # If it's a US number without country code
+            elif len(to_number) == 10:
+                to_number = '+91' + to_number
+            else:
+                to_number = '+91' + to_number
+        
+        print(f"Sending SMS to {to_number}: {message}")
+        
+        # Actually send the SMS
+        twilio_client.messages.create(
+            body=message,
+            from_=TWILIO_PHONE_NUMBER,
+            to=to_number
+        )
+        return True
+    except Exception as e:
+        print(f"Error sending SMS: {str(e)}")
+        print(f"Error details: {type(e).__name__}")
+        if hasattr(e, 'code'):
+            print(f"Twilio error code: {e.code}")
+        if hasattr(e, 'msg'):
+            print(f"Twilio error message: {e.msg}")
+        return False
 
 def check_expiring_memberships():
     with app.app_context():

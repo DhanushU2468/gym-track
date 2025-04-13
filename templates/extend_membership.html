@@ -12,6 +12,7 @@
             <p><strong>Pending Amount:</strong> ₹{{ "%.2f"|format(customer.pending_amount) }}</p>
             
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-group">
                     <label for="extension_period">Extension Period (months)</label>
                     <input type="number" class="form-control" id="extension_period" name="extension_period" min="1" value="1" required>
