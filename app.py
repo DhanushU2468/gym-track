@@ -587,9 +587,16 @@ def edit_customer(customer_id):
 def init_db():
     """Initialize the database and create tables if they don't exist"""
     try:
-        # Create all tables
-        db.create_all()
-        print("Database tables created successfully")
+        # Check if tables exist
+        inspector = db.inspect(db.engine)
+        existing_tables = inspector.get_table_names()
+        
+        if not existing_tables:
+            # Create all tables only if they don't exist
+            db.create_all()
+            print("Database tables created successfully")
+        else:
+            print("Database tables already exist")
         
         # Check if admin exists, if not, redirect to create admin page
         if not admin_exists():
