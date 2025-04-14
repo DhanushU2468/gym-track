@@ -40,36 +40,49 @@ python
 python app.py
 ```
 
-## Deployment
+## Deployment to Railway
 
-This application is configured for deployment on Render.com:
+### Prerequisites
 
-### Option 1: Using render.yaml (Recommended)
+1. A [Railway](https://railway.app/) account
+2. A GitHub account with your code pushed to a repository
 
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Render will automatically detect the render.yaml file and set up both the web service and PostgreSQL database
-4. Add the following environment variables in the Render dashboard:
-   - TWILIO_ACCOUNT_SID
-   - TWILIO_AUTH_TOKEN
-   - TWILIO_PHONE_NUMBER
-   - ADMIN_PHONE_NUMBER
+### Deployment Steps
 
-### Option 2: Manual Setup
+1. Log in to [Railway](https://railway.app/)
+2. Click "New Project" and select "Deploy from GitHub repo"
+3. Select your repository
+4. Add a PostgreSQL database:
+   - Click "New" and select "Database" > "PostgreSQL"
+   - Railway will automatically add the `DATABASE_URL` environment variable to your project
+5. Set up environment variables:
+   - Go to the "Variables" tab
+   - Add the following variables:
+     ```
+     SECRET_KEY=your_secret_key
+     FLASK_ENV=production
+     TWILIO_ACCOUNT_SID=your_twilio_account_sid
+     TWILIO_AUTH_TOKEN=your_twilio_auth_token
+     TWILIO_PHONE_NUMBER=your_twilio_phone
+     ADMIN_PHONE_NUMBER=your_admin_phone
+     ```
+6. Deploy your application:
+   - Railway will automatically detect your `Procfile` and deploy your application
+   - The application will be available at the URL provided by Railway
 
-1. Create a new PostgreSQL database on Render
-2. Create a new Web Service on Render
-3. Connect your GitHub repository
-4. Set the following:
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `gunicorn app:app`
-5. Add the following environment variables:
-   - SECRET_KEY (can be generated)
-   - DATABASE_URL (provided by Render for your PostgreSQL database)
-   - TWILIO_ACCOUNT_SID
-   - TWILIO_AUTH_TOKEN
-   - TWILIO_PHONE_NUMBER
-   - ADMIN_PHONE_NUMBER
+### Database Migrations
+
+After deployment, you need to run database migrations:
+
+1. Connect to your Railway project via the Railway CLI:
+   ```
+   railway login
+   railway link
+   ```
+2. Run migrations:
+   ```
+   railway run flask db upgrade
+   ```
 
 ## First Time Setup
 

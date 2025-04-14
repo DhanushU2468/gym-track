@@ -7,6 +7,7 @@ from twilio.rest import Client
 import os
 from dotenv import load_dotenv
 from flask_wtf.csrf import CSRFProtect
+from flask_migrate import Migrate
 
 load_dotenv()
 
@@ -30,9 +31,13 @@ if DATABASE_URL:
 else:
     print("Using SQLite database: gym.db")
 
+# Initialize database
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+# Initialize Flask-Migrate for database migrations
+migrate = Migrate(app, db)
 
 @app.cli.command("reset-db")
 def reset_db():
@@ -614,11 +619,6 @@ def init_db():
     """Initialize the database and create tables if they don't exist"""
     with app.app_context():
         try:
-            # Ensure the instance folder exists
-            if not os.path.exists('instance'):
-                os.makedirs('instance')
-                print("Created instance directory")
-            
             # Check if tables exist
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()
@@ -642,6 +642,8 @@ def init_db():
             except Exception as e2:
                 print(f"Failed to create tables after error: {str(e2)}")
 
+# Initialize the database when the application starts
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True) 
