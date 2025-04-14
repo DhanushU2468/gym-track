@@ -53,45 +53,51 @@ def reset_db():
 PACKAGES = {
     'basic': {
         'name': 'BASIC PACKAGE',
-        'duration': 1,  # months
-        'admission_fee': 250,
         'fees': 750,
-        'total': 1000,
-        'discount': 0
+        'discount': 0,
+        'admission_fee': 250,
+        'duration': 1,
+        'total': 1000  # fees + admission_fee - discount
     },
     'standard': {
         'name': 'STANDARD PACKAGE',
-        'duration': 3,  # months
         'fees': 2500,
         'discount': 300,
-        'total': 2200
+        'admission_fee': 0,
+        'duration': 3,
+        'total': 2200  # fees - discount
     },
     'premium': {
         'name': 'PREMIUM PACKAGE',
-        'duration': 6,  # months
         'fees': 4750,
         'discount': 550,
-        'total': 4200
+        'admission_fee': 0,
+        'duration': 6,
+        'total': 4200  # fees - discount
     },
     'ultimate': {
         'name': 'ULTIMATE PACKAGE',
-        'duration': 12,  # months
         'fees': 9250,
         'discount': 1050,
-        'total': 8200
+        'admission_fee': 0,
+        'duration': 12,
+        'total': 8200  # fees - discount
     }
 }
 
+# Personal Training Packages
 PERSONAL_TRAINING = {
-    'monthly': {
-        'duration': 1,
+    'basic': {
+        'name': 'BASIC TRAINING',
         'fees': 4000,
-        'discount': 0
+        'discount': 0,
+        'duration': 1
     },
-    'quarterly': {
-        'duration': 3,
+    'advanced': {
+        'name': 'ADVANCED TRAINING',
         'fees': 12000,
-        'discount': 2000
+        'discount': 2000,
+        'duration': 3
     }
 }
 
@@ -114,42 +120,41 @@ if twilio_client:
 else:
     print("Failed to initialize Twilio client. Check your credentials.")
 
-# Database Models
+# Models
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(120), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
-    customers = db.relationship('Customer', backref='trainer', lazy=True)
+    join_date = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=True)
+    email = db.Column(db.String(120))
     phone = db.Column(db.String(20), nullable=False)
+    package_type = db.Column(db.String(20), nullable=False)
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
-    package_type = db.Column(db.String(20), nullable=False)  # basic, standard, premium, ultimate
     membership_end = db.Column(db.DateTime, nullable=False)
     has_cardio = db.Column(db.Boolean, default=False)
     has_personal_training = db.Column(db.Boolean, default=False)
-    personal_training_type = db.Column(db.String(20), nullable=True)  # monthly, quarterly
-    trainer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    personal_training_type = db.Column(db.String(20))
+    trainer_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    admission_fee = db.Column(db.Float, default=0.0)
+    package_fee = db.Column(db.Float, default=0.0)
+    discount = db.Column(db.Float, default=0.0)
+    total_amount = db.Column(db.Float, default=0.0)
     notification_sent = db.Column(db.Boolean, default=False)
-    admission_fee = db.Column(db.Float, nullable=True)
-    package_fee = db.Column(db.Float, nullable=False)
-    discount = db.Column(db.Float, nullable=True)
-    total_amount = db.Column(db.Float, nullable=False)
     treadmill_access = db.Column(db.Boolean, default=False)
-    fees = db.relationship('Fee', backref='customer', lazy=True, cascade="all, delete-orphan")
     pending_amount = db.Column(db.Float, default=0.0)
 
 class Fee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
     amount = db.Column(db.Float, nullable=False)
-    payment_date = db.Column(db.DateTime, default=datetime.utcnow)
-    payment_type = db.Column(db.String(50), nullable=False)  # registration, monthly, additional
+    payment_type = db.Column(db.String(20), nullable=False)
     description = db.Column(db.String(200))
+    payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     collected_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 def send_sms(to_number, message):
@@ -187,7 +192,7 @@ def send_sms(to_number, message):
                 print(f"Twilio error code: {e.code}")
             if hasattr(e, 'msg'):
                 print(f"Twilio error message: {e.msg}")
-    return False
+            return False
 
 def check_expiring_memberships():
     """Check for memberships that are expiring soon and send notifications"""
@@ -242,11 +247,6 @@ def check_expiring_memberships():
             customer.notification_sent = False
             db.session.commit()
 
-# Initialize scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=check_expiring_memberships, trigger="interval", hours=24)
-scheduler.start()
-
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -254,7 +254,7 @@ def load_user(user_id):
 def admin_exists():
     """Check if an admin user exists in the database"""
     with app.app_context():
-    return User.query.filter_by(is_admin=True).first() is not None
+        return User.query.filter_by(is_admin=True).first() is not None
 
 # Routes
 @app.route('/')
@@ -266,21 +266,28 @@ def index():
 @app.route('/create_admin', methods=['GET', 'POST'])
 def create_admin():
     if admin_exists():
-        return redirect(url_for('index'))
+        flash('Admin account already exists.', 'error')
+        return redirect(url_for('login'))
     
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists', 'error')
+        if not username or not password:
+            flash('Username and password are required.', 'error')
             return redirect(url_for('create_admin'))
         
+        # Check if username already exists
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists.', 'error')
+            return redirect(url_for('create_admin'))
+        
+        # Create admin user
         admin = User(username=username, password=password, is_admin=True)
         db.session.add(admin)
         db.session.commit()
         
-        flash('Admin account created successfully!', 'success')
+        flash('Admin account created successfully. Please log in.', 'success')
         return redirect(url_for('login'))
     
     return render_template('create_admin.html')
@@ -290,18 +297,28 @@ def create_admin():
 def register_customer():
     if request.method == 'POST':
         name = request.form.get('name')
-        email = request.form.get('email')  # This will be None if not provided
+        email = request.form.get('email')
         phone = request.form.get('phone')
         package_type = request.form.get('package_type')
+        duration_months = int(request.form.get('duration_months', 1))
         has_cardio = 'has_cardio' in request.form
         has_personal_training = 'has_personal_training' in request.form
         personal_training_type = request.form.get('personal_training_type')
         treadmill_access = 'treadmill_access' in request.form
         
+        if not name or not phone or not package_type:
+            flash('Name, phone, and package type are required.', 'error')
+            return redirect(url_for('register_customer'))
+        
         # Get package details
-        package = PACKAGES[package_type]
-        duration_months = package['duration']
-        end_date = datetime.utcnow() + timedelta(days=duration_months * 30)
+        package = PACKAGES.get(package_type)
+        if not package:
+            flash('Invalid package type.', 'error')
+            return redirect(url_for('register_customer'))
+        
+        # Calculate membership end date
+        join_date = datetime.utcnow()
+        end_date = join_date + timedelta(days=30 * duration_months)
         
         # Calculate total amount
         total_amount = package['total']
@@ -397,7 +414,7 @@ def view_customers():
             )
         ).all()
     else:
-    customers = Customer.query.all()
+        customers = Customer.query.all()
     
     total_fees = db.session.query(db.func.sum(Fee.amount)).scalar() or 0
     today_fees = db.session.query(db.func.sum(Fee.amount)).filter(
@@ -457,12 +474,15 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        
         user = User.query.filter_by(username=username).first()
         
-        if user and user.password == password:  # In production, use proper password hashing
+        if user and user.password == password:
             login_user(user)
+            flash('Logged in successfully.', 'success')
             return redirect(url_for('index'))
-        flash('Invalid username or password', 'error')
+        else:
+            flash('Invalid username or password.', 'error')
     
     return render_template('login.html')
 
@@ -470,24 +490,22 @@ def login():
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('index'))
+    flash('Logged out successfully.', 'success')
+    return redirect(url_for('login'))
 
 @app.route('/delete_customer/<int:customer_id>', methods=['POST'])
 @login_required
 def delete_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    customer_name = customer.name
     
-    try:
-        # Delete the customer (related fees will be deleted automatically due to cascade)
-        db.session.delete(customer)
-        db.session.commit()
-        flash(f'Customer {customer_name} has been successfully removed.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('An error occurred while deleting the customer.', 'error')
-        print(f"Error deleting customer: {str(e)}")
+    # Delete all fees associated with this customer
+    Fee.query.filter_by(customer_id=customer_id).delete()
     
+    # Delete the customer
+    db.session.delete(customer)
+    db.session.commit()
+    
+    flash(f'Customer {customer.name} has been deleted.', 'success')
     return redirect(url_for('view_customers'))
 
 @app.route('/add_fee/<int:customer_id>', methods=['POST'])
@@ -495,13 +513,13 @@ def delete_customer(customer_id):
 def add_fee(customer_id):
     customer = Customer.query.get_or_404(customer_id)
     amount = float(request.form.get('amount', 0))
-    payment_type = request.form.get('payment_type')
+    payment_type = request.form.get('payment_type', 'monthly')
     description = request.form.get('description', '')
-
+    
     if amount <= 0:
-        flash('Please enter a valid amount.', 'error')
+        flash('Amount must be greater than zero.', 'error')
         return redirect(url_for('view_customers'))
-
+    
     fee = Fee(
         customer_id=customer_id,
         amount=amount,
@@ -553,34 +571,65 @@ def extend_membership(customer_id):
     
     if request.method == 'POST':
         extension_period = int(request.form.get('extension_period', 0))
-        cardio_access = request.form.get('cardio_access') == 'on'
-        personal_training = request.form.get('personal_training') == 'on'
-        treadmill_access = request.form.get('treadmill_access') == 'on'
-        personal_training_type = request.form.get('personal_training_type')
         initial_payment = float(request.form.get('initial_payment', 0))
         
+        if extension_period <= 0:
+            flash('Extension period must be greater than zero.', 'error')
+            return redirect(url_for('extend_membership', customer_id=customer_id))
+        
         # Calculate new expiry date
-        current_expiry = customer.membership_end or datetime.now()
-        new_expiry = current_expiry + timedelta(days=30 * extension_period)
+        current_end_date = customer.membership_end
+        new_end_date = current_end_date + timedelta(days=30 * extension_period)
+        
+        # Calculate extension fee
+        extension_fee = 0
+        if customer.package_type == 'basic':
+            extension_fee = 1500 * extension_period
+        elif customer.package_type == 'standard':
+            extension_fee = 2000 * extension_period
+        elif customer.package_type == 'premium':
+            extension_fee = 2500 * extension_period
+        
+        # Add treadmill fee if applicable
+        if customer.treadmill_access:
+            extension_fee += 500 * extension_period
+        
+        # Add personal training fee if applicable
+        if customer.has_personal_training and customer.personal_training_type:
+            pt_package = PERSONAL_TRAINING[customer.personal_training_type]
+            extension_fee += (pt_package['fees'] - pt_package['discount']) * extension_period
         
         # Update customer details
-        customer.membership_end = new_expiry
-        customer.has_cardio = cardio_access
-        customer.has_personal_training = personal_training
-        customer.treadmill_access = treadmill_access
-        customer.personal_training_type = personal_training_type if personal_training else None
+        customer.membership_end = new_end_date
+        customer.pending_amount = extension_fee - initial_payment
         
-        # Create payment record
-        payment = Fee(
-            customer_id=customer.id,
-            amount=initial_payment,
-            payment_date=datetime.now(),
-            payment_type='Membership Extension',
-            collected_by=current_user.id
-        )
+        # Add payment record if initial payment is provided
+        if initial_payment > 0:
+            fee = Fee(
+                customer_id=customer.id,
+                amount=initial_payment,
+                payment_type='Membership Extension',
+                description=f'Extension payment for {extension_period} month(s)',
+                collected_by=current_user.id
+            )
+            db.session.add(fee)
         
-        db.session.add(payment)
         db.session.commit()
+        
+        # Send SMS notification to customer
+        customer_message = (
+            f"Dear {customer.name}, your {customer.package_type} membership at The Fitness Zone "
+            f"has been extended by {extension_period} month(s). Your new expiry date is "
+            f"{new_end_date.strftime('%d-%m-%Y')}. Thank you for choosing us!"
+        )
+        customer_sms_sent = send_sms(customer.phone, customer_message)
+        
+        # Send notification to admin
+        admin_message = (
+            f"Membership extended: {customer.name}, {customer.package_type} package, "
+            f"Extended by: {extension_period} month(s), New expiry: {new_end_date.strftime('%d-%m-%Y')}"
+        )
+        admin_sms_sent = send_sms(ADMIN_PHONE_NUMBER, admin_message) if ADMIN_PHONE_NUMBER else False
         
         flash('Membership extended successfully!', 'success')
         return redirect(url_for('view_customers'))
@@ -601,13 +650,9 @@ def edit_customer(customer_id):
     
     if request.method == 'POST':
         # Update customer details
-        customer.name = request.form.get('name')
-        customer.email = request.form.get('email')
-        customer.phone = request.form.get('phone')
-        customer.has_cardio = 'has_cardio' in request.form
-        customer.has_personal_training = 'has_personal_training' in request.form
-        customer.personal_training_type = request.form.get('personal_training_type') if 'has_personal_training' in request.form else None
-        customer.treadmill_access = 'treadmill_access' in request.form
+        customer.name = request.form.get('name', customer.name)
+        customer.email = request.form.get('email', customer.email)
+        customer.phone = request.form.get('phone', customer.phone)
         
         db.session.commit()
         flash('Customer details updated successfully!', 'success')
@@ -637,7 +682,7 @@ def init_db():
             print(f"Error initializing database: {str(e)}")
             # Try to create tables even if inspection fails
             try:
-        db.create_all()
+                db.create_all()
                 print("Database tables created after error recovery")
             except Exception as e2:
                 print(f"Failed to create tables after error: {str(e2)}")
