@@ -614,6 +614,11 @@ def init_db():
     """Initialize the database and create tables if they don't exist"""
     with app.app_context():
         try:
+            # Ensure the instance folder exists
+            if not os.path.exists('instance'):
+                os.makedirs('instance')
+                print("Created instance directory")
+            
             # Check if tables exist
             inspector = db.inspect(db.engine)
             existing_tables = inspector.get_table_names()
@@ -623,13 +628,19 @@ def init_db():
                 db.create_all()
                 print("Database tables created successfully")
             else:
-                print("Database tables already exist")
+                print(f"Database tables already exist: {existing_tables}")
             
             # Check if admin exists, if not, redirect to create admin page
             if not admin_exists():
                 print("No admin user found. Please create an admin account.")
         except Exception as e:
             print(f"Error initializing database: {str(e)}")
+            # Try to create tables even if inspection fails
+            try:
+                db.create_all()
+                print("Database tables created after error recovery")
+            except Exception as e2:
+                print(f"Failed to create tables after error: {str(e2)}")
 
 if __name__ == '__main__':
     init_db()
