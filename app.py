@@ -187,7 +187,7 @@ def send_sms(to_number, message):
                 print(f"Twilio error code: {e.code}")
             if hasattr(e, 'msg'):
                 print(f"Twilio error message: {e.msg}")
-            return False
+    return False
 
 def check_expiring_memberships():
     """Check for memberships that are expiring soon and send notifications"""
@@ -254,7 +254,7 @@ def load_user(user_id):
 def admin_exists():
     """Check if an admin user exists in the database"""
     with app.app_context():
-        return User.query.filter_by(is_admin=True).first() is not None
+    return User.query.filter_by(is_admin=True).first() is not None
 
 # Routes
 @app.route('/')
@@ -397,7 +397,7 @@ def view_customers():
             )
         ).all()
     else:
-        customers = Customer.query.all()
+    customers = Customer.query.all()
     
     total_fees = db.session.query(db.func.sum(Fee.amount)).scalar() or 0
     today_fees = db.session.query(db.func.sum(Fee.amount)).filter(
@@ -637,7 +637,7 @@ def init_db():
             print(f"Error initializing database: {str(e)}")
             # Try to create tables even if inspection fails
             try:
-                db.create_all()
+        db.create_all()
                 print("Database tables created after error recovery")
             except Exception as e2:
                 print(f"Failed to create tables after error: {str(e2)}")
